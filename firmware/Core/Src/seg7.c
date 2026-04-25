@@ -13,11 +13,8 @@
 #include "cmsis_os.h"
 #include "system_state.h"
 
-//static uint32_t actual_value;
-//static uint32_t active_digit;
-//static uint32_t actual_value;
+
 static uint32_t active_digit = 0;
-//extern volatile int set_temp;
 static volatile uint32_t seg7_value = 0;
 
 static void set_output(uint8_t mask)
