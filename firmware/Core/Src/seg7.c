@@ -87,7 +87,7 @@ void seg7_show(uint32_t value)
 void seg7_update(void)
 {
 	uint32_t value = seg7_value;
-    // odbierz nowe dane (jeśli są)
+
 
 
     HAL_GPIO_WritePin(SEG_1_GPIO_Port, SEG_1_Pin, GPIO_PIN_SET);
