@@ -24,7 +24,7 @@
 #include "usart.h"
 #include "gpio.h"
 #include "ir.h"
-
+#include "seg7.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -62,7 +62,17 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+if (htim->Instance == TIM6)
+{
+  HAL_IncTick();
+}
+if (htim->Instance == TIM7)
+{
+    seg7_update();
+}
+}
 /* USER CODE END 0 */
 
 /**
@@ -98,8 +108,9 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USART1_UART_Init();
   MX_TIM7_Init();
+  HAL_TIM_Base_Start_IT(&htim7);
   MX_TIM2_Init();
-//  MX_IWDG_Init();
+  //MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
 //  HAL_TIM_Base_Start(&htim2);
 //  HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
@@ -197,7 +208,14 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             }
         }
     }
-}
+    //timer callback to update 7-seg display
+//	if (htim->Instance == TIM7) {
+//	    seg7_update();
+	}
+//}
+
+
+
 /* USER CODE END 4 */
 
 /**
@@ -208,19 +226,25 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   * @param  htim : TIM handle
   * @retval None
   */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
+//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+//{
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
+	/*
   if (htim->Instance == TIM6)
   {
     HAL_IncTick();
   }
+  if (htim->Instance == TIM7)
+  {
+      seg7_update();
+  }
+*/
   /* USER CODE BEGIN Callback 1 */
 
   /* USER CODE END Callback 1 */
-}
+//}
 
 /**
   * @brief  This function is executed in case of error occurrence.
