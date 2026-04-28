@@ -247,7 +247,17 @@ void Start_uart_Task(void *argument)
 
   for (;;) {
       if (xQueuePeek(stateQueue, &state, portMAX_DELAY) == pdPASS) {
+    	  int len = snprintf(msg, sizeof(msg),
+    	      "{\"temperature\":%.1f,\"heating\":%d,\"set_temperature\":%d}\n",
+    	      state.temp,
+    	      state.relay ? 1 : 0,
+    	      state.set_temp
+    	  );
 
+    	  if (len > 0 && len < sizeof(msg)) {
+    	      HAL_UART_Transmit(&huart1, (uint8_t*)msg, len, HAL_MAX_DELAY);
+    	  }
+/*
           snprintf(msg, sizeof(msg),
               "{\"set\":%d,\"temp\":%.1f}\r\n",
               state.set_temp,
@@ -255,8 +265,11 @@ void Start_uart_Task(void *argument)
 
           HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
       }
+      */
+
       osDelay(200);
   }
+}
 }
   /* USER CODE END Start_uart_Task */
 
