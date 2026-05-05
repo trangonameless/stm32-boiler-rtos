@@ -140,8 +140,8 @@ void MX_FREERTOS_Init(void) {
   /* add queues, ... */
   uartQueue = xQueueCreate(8, sizeof(char[64]));
   stateQueue = xQueueCreate(1, sizeof(SystemState_t));
-  tempQueue = xQueueCreate(5, sizeof(float));
-  irQueue = xQueueCreate(5, sizeof(int));
+  tempQueue = xQueueCreate(8, sizeof(float));
+  irQueue = xQueueCreate(8, sizeof(IrMessage));
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -290,25 +290,34 @@ void Start_ir_Task(void *argument)
 	        if (osSemaphoreAcquire(irSemaphoreHandle, osWaitForever) == osOK) {
 
 	            int value = ir_read();
-	            int delta = 0;
+	            IrMessage msg;
+
 
 	            if (value >= 0) {
 	                switch (value) {
-	                    case IR_CODE_PLUS:
-	                        delta = 1;
-	                        break;
-	                    case IR_CODE_MINUS:
-	                        delta = -1;
-	                        break;
-	                }
 
-	                if (delta != 0) {
-	                    xQueueSend(irQueue, &delta, 0);
+	                    case IR_CODE_PLUS:
+	                        msg.type = IR_EVENT_TEMP_CHANGE;
+	                        msg.delta = 1;
+	                        xQueueSend(irQueue, &msg, 0);
+	                        break;
+
+	                    case IR_CODE_MINUS:
+	                        msg.type = IR_EVENT_TEMP_CHANGE;
+	                        msg.delta = -1;
+	                        xQueueSend(irQueue, &msg, 0);
+	                        break;
+
+	                    case IR_CODE_ONOFF:
+	                        msg.type = IR_EVENT_TOGGLE_POWER;
+	                        msg.delta = 0;
+	                        xQueueSend(irQueue, &msg, 0);
+	                        break;
 	                }
+	              }
 	            }
 	        }
 	    }
-	}
   /* USER CODE END Start_ir_Task */
 
 
@@ -327,23 +336,33 @@ void Start_Control_Task(void *argument)
 	#define TEMP_HYST 1
     SystemState_t state = {
         .set_temp = TEMP_MIN,
-        .temp = 0
+        .temp = 0,
+		.relay = false
     };
 
-    int delta;
+    IrMessage msg;
     float temp;
+    bool boiler_off = false;
+
 
   /* Infinite loop */
 
     for (;;)
     {
         // 1. Recive from IR
-        if (xQueueReceive(irQueue, &delta, 0) == pdPASS)
+        if (xQueueReceive(irQueue, &msg, 0) == pdPASS)
         {
-            state.set_temp += delta;
 
-            if (state.set_temp < TEMP_MIN) state.set_temp = TEMP_MIN;
-            if (state.set_temp > TEMP_MAX) state.set_temp = TEMP_MAX;
+            switch (msg.type) {
+
+                case IR_EVENT_TEMP_CHANGE:
+                    state.set_temp += msg.delta;
+                    break;
+
+                case IR_EVENT_TOGGLE_POWER:
+                    boiler_off = !boiler_off;
+                    break;
+            }
         }
 
         // 2. Recive from temperature sensor
@@ -353,18 +372,33 @@ void Start_Control_Task(void *argument)
         }
 
         // 3. Control relay
-        if (state.temp <= (state.set_temp - TEMP_HYST))
-        {
+      if (state.set_temp < TEMP_MIN) state.set_temp = TEMP_MIN;
+      if (state.set_temp > TEMP_MAX) state.set_temp = TEMP_MAX;
+
+
+  	  if (boiler_off) {
+  	      state.relay = false;
+  	  }
+  	  else if (!state.relay && state.temp <= (state.set_temp - TEMP_HYST)) {
+  	      state.relay = true;
+  	  }
+  	  else if (state.relay && state.temp >= (state.set_temp + TEMP_HYST)) {
+  	      state.relay = false;
+  	  }
+
+  	  if (state.relay) {
+  	      printf("HEATING ON\n");
   	      HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
   	      HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
   	      HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
-        }
-        else if (state.temp >= (state.set_temp + TEMP_HYST))
-        {
+
+
+  	  } else {
+  	      printf("HEATING OFF\n");
   	      HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
   	      HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
   	      HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
-        }
+  	  }
 
         // 4. Public state
         xQueueOverwrite(stateQueue, &state);
