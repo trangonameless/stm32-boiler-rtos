@@ -30,6 +30,8 @@
 #include "wire.h"
 #include "ir.h"
 #include "usart.h"
+#include "seg7.h"
+#include <stdio.h>
 #include "system_state.h"
 /* USER CODE END Includes */
 
@@ -40,7 +42,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define TEMP_MIN 20
+#define TEMP_MAX 70
+#define TEMP_HYST 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -202,7 +206,6 @@ void Start_temp_Task(void *argument)
 {
   /* USER CODE BEGIN Start_temp_Task */
 	    uint8_t ds1[DS18B20_ROM_CODE_SIZE];
-//	    char msg[64];
 
 	    // Read DS18B20 ROM code
 	    if (ds18b20_read_address(ds1) != HAL_OK) {
@@ -220,7 +223,6 @@ void Start_temp_Task(void *argument)
 
 	        // Get temperature
 	        temp = ds18b20_get_temp(NULL);
-//	        snprintf(msg, sizeof(msg), "{\"temperature\":%.1f}\n\r", temp);
 	        xQueueSend(tempQueue, &temp, 0);
 	        osDelay(1000);
 
@@ -239,7 +241,7 @@ void Start_temp_Task(void *argument)
 void Start_uart_Task(void *argument)
 {
   /* USER CODE BEGIN Start_uart_Task */
-  char msg[64];
+  char msg[128];
   SystemState_t state;
 
   /* Infinite loop */
@@ -248,10 +250,11 @@ void Start_uart_Task(void *argument)
   for (;;) {
       if (xQueuePeek(stateQueue, &state, portMAX_DELAY) == pdPASS) {
     	  int len = snprintf(msg, sizeof(msg),
-    	      "{\"temperature\":%.1f,\"heating\":%d,\"set_temperature\":%d}\n",
+    	      "{\"temperature\":%.1f,\"heating\":%d,\"set_temperature\":%d,\"boiler_off\":%d}\n",
     	      state.temp,
     	      state.relay ? 1 : 0,
-    	      state.set_temp
+    	      state.set_temp,
+			  state.boiler_off ? 1 : 0
     	  );
 
     	  if (len > 0 && len < sizeof(msg)) {
@@ -331,18 +334,16 @@ void Start_ir_Task(void *argument)
 void Start_Control_Task(void *argument)
 {
   /* USER CODE BEGIN Start_Control_Task */
-	#define TEMP_MIN 20
-	#define TEMP_MAX 70
-	#define TEMP_HYST 1
+
     SystemState_t state = {
         .set_temp = TEMP_MIN,
         .temp = 0,
-		.relay = false
+		.relay = false,
+		.boiler_off = false
     };
 
     IrMessage msg;
     float temp;
-    bool boiler_off = false;
 
 
   /* Infinite loop */
@@ -360,7 +361,7 @@ void Start_Control_Task(void *argument)
                     break;
 
                 case IR_EVENT_TOGGLE_POWER:
-                    boiler_off = !boiler_off;
+                    state.boiler_off = !state.boiler_off;
                     break;
             }
         }
@@ -376,7 +377,7 @@ void Start_Control_Task(void *argument)
       if (state.set_temp > TEMP_MAX) state.set_temp = TEMP_MAX;
 
 
-  	  if (boiler_off) {
+  	  if (state.boiler_off) {
   	      state.relay = false;
   	  }
   	  else if (!state.relay && state.temp <= (state.set_temp - TEMP_HYST)) {
@@ -387,14 +388,12 @@ void Start_Control_Task(void *argument)
   	  }
 
   	  if (state.relay) {
-  	      printf("HEATING ON\n");
   	      HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
   	      HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
   	      HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
 
 
   	  } else {
-  	      printf("HEATING OFF\n");
   	      HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
   	      HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
   	      HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
