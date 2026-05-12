@@ -208,11 +208,8 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             }
         }
     }
-    //timer callback to update 7-seg display
-//	if (htim->Instance == TIM7) {
-//	    seg7_update();
 	}
-//}
+
 
 
 
@@ -231,16 +228,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
-	/*
-  if (htim->Instance == TIM6)
-  {
-    HAL_IncTick();
-  }
-  if (htim->Instance == TIM7)
-  {
-      seg7_update();
-  }
-*/
+
   /* USER CODE BEGIN Callback 1 */
 
   /* USER CODE END Callback 1 */

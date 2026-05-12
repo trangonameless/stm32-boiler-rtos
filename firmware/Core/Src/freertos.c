@@ -339,12 +339,13 @@ void Start_Control_Task(void *argument)
         .set_temp = TEMP_MIN,
         .temp = 0,
 		.relay = false,
-		.boiler_off = false
+		.boiler_off = false,
+		.sensor_fault = false
     };
 
     IrMessage msg;
     float temp;
-
+    static uint32_t last_toggle = 0;
 
   /* Infinite loop */
 
@@ -372,32 +373,65 @@ void Start_Control_Task(void *argument)
             state.temp = temp;
         }
 
-        // 3. Control relay
-      if (state.set_temp < TEMP_MIN) state.set_temp = TEMP_MIN;
-      if (state.set_temp > TEMP_MAX) state.set_temp = TEMP_MAX;
+        // 3. Control relay and temperature sensor fault handler
+        // Sensor fault detection
+        if (state.temp == 85)
+        {
+            state.boiler_off = true;
+            state.sensor_fault = true;
+        }
+        else
+        {
+            state.sensor_fault = false;
+
+            if (state.set_temp < TEMP_MIN) state.set_temp = TEMP_MIN;
+            if (state.set_temp > TEMP_MAX) state.set_temp = TEMP_MAX;
+        }
 
 
-  	  if (state.boiler_off) {
-  	      state.relay = false;
-  	  }
-  	  else if (!state.relay && state.temp <= (state.set_temp - TEMP_HYST)) {
-  	      state.relay = true;
-  	  }
-  	  else if (state.relay && state.temp >= (state.set_temp + TEMP_HYST)) {
-  	      state.relay = false;
-  	  }
+        // Relay control
+        if (state.boiler_off || state.sensor_fault)
+        {
+            state.relay = false;
+        }
+        else if (!state.relay && state.temp <= (state.set_temp - TEMP_HYST))
+        {
+            state.relay = true;
+        }
+        else if (state.relay && state.temp >= (state.set_temp + TEMP_HYST))
+        {
+            state.relay = false;
+        }
 
-  	  if (state.relay) {
-  	      HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
-  	      HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
-  	      HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
 
+        // Outputs
+        if (state.sensor_fault)
+        {
+            // blinking red LED
+            if (osKernelGetTickCount() - last_toggle >= 200)
+            {
+                HAL_GPIO_TogglePin(RED_LED_GPIO_Port, RED_LED_Pin);
+                last_toggle = osKernelGetTickCount();
+            }
 
-  	  } else {
-  	      HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
-  	      HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
-  	      HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
-  	  }
+            HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
+        }
+        else
+        {
+            // normal LED behavior
+            if (state.relay)
+            {
+                HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
+                HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
+                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
+            }
+            else
+            {
+                HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
+                HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
+                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
+            }
+        }
 
         // 4. Public state
         xQueueOverwrite(stateQueue, &state);
