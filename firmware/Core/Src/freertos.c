@@ -248,19 +248,20 @@ void Start_uart_Task(void *argument)
 
 
   for (;;) {
-      if (xQueuePeek(stateQueue, &state, portMAX_DELAY) == pdPASS) {
+      if (xQueuePeek(stateQueue, &state, 25) == pdPASS) {
     	  int len = snprintf(msg, sizeof(msg),
     	      "{\"temperature\":%.1f,\"heating\":%d,\"set_temperature\":%d,\"boiler_off\":%d}\n",
     	      state.temp,
-    	      state.relay ? 1 : 0,
+			  (state.mode == BOILER_HEATING) ? 1 : 0,
     	      state.set_temp,
-			  state.boiler_off ? 1 : 0
+			  (state.mode == BOILER_OFF) ? 1 : 0
     	  );
 
     	  if (len > 0 && len < sizeof(msg)) {
-    	      HAL_UART_Transmit(&huart1, (uint8_t*)msg, len, HAL_MAX_DELAY);
+    	      HAL_UART_Transmit(&huart1, (uint8_t*)msg, len, 50);
     	  }
 /*
+  //debugging
           snprintf(msg, sizeof(msg),
               "{\"set\":%d,\"temp\":%.1f}\r\n",
               state.set_temp,
@@ -338,9 +339,7 @@ void Start_Control_Task(void *argument)
     SystemState_t state = {
         .set_temp = TEMP_MIN,
         .temp = 0,
-		.relay = false,
-		.boiler_off = false,
-		.sensor_fault = false
+	    .mode = BOILER_OFF
     };
 
     IrMessage msg;
@@ -362,7 +361,14 @@ void Start_Control_Task(void *argument)
                     break;
 
                 case IR_EVENT_TOGGLE_POWER:
-                    state.boiler_off = !state.boiler_off;
+                    if (state.mode == BOILER_OFF)
+                    {
+                        state.mode = BOILER_IDLE;
+                    }
+                    else
+                    {
+                        state.mode = BOILER_OFF;
+                    }
                     break;
             }
         }
@@ -377,60 +383,82 @@ void Start_Control_Task(void *argument)
         // Sensor fault detection
         if (state.temp == 85)
         {
-            state.boiler_off = true;
-            state.sensor_fault = true;
+            state.mode = BOILER_ERROR;
         }
-        else
+        //state
+        switch (state.mode)
         {
-            state.sensor_fault = false;
+            case BOILER_OFF:
 
-            if (state.set_temp < TEMP_MIN) state.set_temp = TEMP_MIN;
-            if (state.set_temp > TEMP_MAX) state.set_temp = TEMP_MAX;
-        }
+                break;
 
+            case BOILER_IDLE:
 
-        // Relay control
-        if (state.boiler_off || state.sensor_fault)
-        {
-            state.relay = false;
-        }
-        else if (!state.relay && state.temp <= (state.set_temp - TEMP_HYST))
-        {
-            state.relay = true;
-        }
-        else if (state.relay && state.temp >= (state.set_temp + TEMP_HYST))
-        {
-            state.relay = false;
+                if (state.temp <= (state.set_temp - TEMP_HYST))
+                {
+                    state.mode = BOILER_HEATING;
+                }
+
+                break;
+
+            case BOILER_HEATING:
+
+                if (state.temp >= (state.set_temp + TEMP_HYST))
+                {
+                    state.mode = BOILER_IDLE;
+                }
+
+                break;
+
+            case BOILER_ERROR:
+
+                break;
         }
 
 
         // Outputs
-        if (state.sensor_fault)
+        switch (state.mode)
         {
-            // blinking red LED
-            if (osKernelGetTickCount() - last_toggle >= 200)
-            {
-                HAL_GPIO_TogglePin(RED_LED_GPIO_Port, RED_LED_Pin);
-                last_toggle = osKernelGetTickCount();
-            }
+            case BOILER_OFF:
 
-            HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
-        }
-        else
-        {
-            // normal LED behavior
-            if (state.relay)
-            {
-                HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
-                HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
-                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
-            }
-            else
-            {
                 HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
+
                 HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
                 HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
-            }
+
+                break;
+
+            case BOILER_IDLE:
+
+                HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
+
+                HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
+                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
+
+                break;
+
+            case BOILER_HEATING:
+
+                HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
+
+                HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
+                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
+
+                break;
+
+            case BOILER_ERROR:
+
+                HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
+
+                if (osKernelGetTickCount() - last_toggle >= 200)
+                {
+                    HAL_GPIO_TogglePin(RED_LED_GPIO_Port, RED_LED_Pin);
+                    last_toggle = osKernelGetTickCount();
+                }
+
+                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
+
+                break;
         }
 
         // 4. Public state
