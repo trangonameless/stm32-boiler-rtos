@@ -385,6 +385,10 @@ void Start_Control_Task(void *argument)
         {
             state.mode = BOILER_ERROR;
         }
+        //set temperature clamps
+
+        if (state.set_temp < TEMP_MIN) state.set_temp = TEMP_MIN;
+        if (state.set_temp > TEMP_MAX) state.set_temp = TEMP_MAX;
         //state
         switch (state.mode)
         {
