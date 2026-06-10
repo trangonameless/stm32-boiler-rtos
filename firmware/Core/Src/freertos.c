@@ -44,7 +44,9 @@
 /* USER CODE BEGIN PD */
 #define TEMP_MIN 20
 #define TEMP_MAX 70
-#define TEMP_HYST 1
+#define TEMP_HYST 0.5
+#define ONOFF_DEBOUNCE_MS 400
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -144,7 +146,7 @@ void MX_FREERTOS_Init(void) {
   /* add queues, ... */
   uartQueue = xQueueCreate(8, sizeof(char[64]));
   stateQueue = xQueueCreate(1, sizeof(SystemState_t));
-  tempQueue = xQueueCreate(8, sizeof(float));
+  tempQueue = xQueueCreate(1, sizeof(float));
   irQueue = xQueueCreate(8, sizeof(IrMessage));
   /* USER CODE END RTOS_QUEUES */
 
@@ -223,7 +225,7 @@ void Start_temp_Task(void *argument)
 
 	        // Get temperature
 	        temp = ds18b20_get_temp(NULL);
-	        xQueueSend(tempQueue, &temp, 0);
+	        xQueueOverwrite(tempQueue, &temp);
 	        osDelay(1000);
 
 	        }
@@ -288,6 +290,7 @@ void Start_uart_Task(void *argument)
 void Start_ir_Task(void *argument)
 {
   /* USER CODE BEGIN Start_ir_Task */
+    static uint32_t last_onoff_time = 0;
     ir_init();
   /* Infinite loop */
 	   for (;;) {
@@ -313,10 +316,19 @@ void Start_ir_Task(void *argument)
 	                        break;
 
 	                    case IR_CODE_ONOFF:
-	                        msg.type = IR_EVENT_TOGGLE_POWER;
-	                        msg.delta = 0;
-	                        xQueueSend(irQueue, &msg, 0);
-	                        break;
+	                    {
+	                        uint32_t now = osKernelGetTickCount();
+
+	                        if ((now - last_onoff_time) > ONOFF_DEBOUNCE_MS)
+	                        {
+	                            msg.type = IR_EVENT_TOGGLE_POWER;
+	                            msg.delta = 0;
+	                            xQueueSend(irQueue, &msg, 0);
+
+	                            last_onoff_time = now;
+	                        }
+	                    }
+	                    break;
 	                }
 	              }
 	            }
@@ -428,7 +440,7 @@ void Start_Control_Task(void *argument)
                 HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
 
                 HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
-                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
+                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
 
                 break;
 
@@ -446,7 +458,7 @@ void Start_Control_Task(void *argument)
                 HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
 
                 HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
-                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
+                HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
 
                 break;
 
