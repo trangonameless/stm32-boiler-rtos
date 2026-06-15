@@ -61,7 +61,8 @@ UART communication
 Migration from loop to RTOS multitasking
 Introduction of FSM for boiler control logic
 Improved IR remote responsiveness (interrupt + queue-based processing)
-<img width="1009" height="1346" alt="20260610_110549(1)" src="https://github.com/user-attachments/assets/bda76a36-0f75-49a4-ab3d-9457b62a9ebf" />
+<img width="302" height="403" alt="20260610_110549(1)" src="https://github.com/user-attachments/assets/b280b420-0f25-433f-9cb8-f9eba1803db3" />
+
 
 
 
