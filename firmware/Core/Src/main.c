@@ -23,11 +23,11 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "ir.h"
-#include "seg7.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ir.h"
+#include "seg7.h"
 extern osSemaphoreId_t irSemaphoreHandle;
 
 /* USER CODE END Includes */
@@ -110,10 +110,9 @@ int main(void)
   MX_TIM7_Init();
   HAL_TIM_Base_Start_IT(&htim7);
   MX_TIM2_Init();
-  //MX_IWDG_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
-//  HAL_TIM_Base_Start(&htim2);
-//  HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -189,7 +188,7 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-
+// IR input capture ISR: decodes signal
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
     if (htim == &htim2)

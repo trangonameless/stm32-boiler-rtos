@@ -22,20 +22,8 @@ typedef enum {
 typedef struct {
     int set_temp;
     float temp;
-
     BoilerState_t mode;
-
 } SystemState_t;
-
-typedef enum {
-    IR_EVENT_TEMP_CHANGE,
-    IR_EVENT_TOGGLE_POWER
-} IrEventType;
-
-typedef struct {
-    IrEventType type;
-    int delta;
-} IrMessage;
 
 
 #endif /* INC_SYSTEM_STATE_H_ */

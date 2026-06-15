@@ -22,6 +22,7 @@
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
+#include "iwdg.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -33,6 +34,9 @@
 #include "seg7.h"
 #include <stdio.h>
 #include "system_state.h"
+#include "ir_messages.h"
+#include "system_monitor.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,10 +66,10 @@ QueueHandle_t tempQueue;
 QueueHandle_t irQueue;
 
 /* USER CODE END Variables */
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
+/* Definitions for WatchdogTask */
+osThreadId_t WatchdogTaskHandle;
+const osThreadAttr_t WatchdogTask_attributes = {
+  .name = "WatchdogTask",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
@@ -108,7 +112,7 @@ const osSemaphoreAttr_t irSemaphore_attributes = {
 
 /* USER CODE END FunctionPrototypes */
 
-void StartDefaultTask(void *argument);
+void StartWatchdogTask(void *argument);
 void Start_temp_Task(void *argument);
 void Start_uart_Task(void *argument);
 void Start_ir_Task(void *argument);
@@ -151,8 +155,8 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of WatchdogTask */
+  WatchdogTaskHandle = osThreadNew(StartWatchdogTask, NULL, &WatchdogTask_attributes);
 
   /* creation of temp_Task */
   temp_TaskHandle = osThreadNew(Start_temp_Task, NULL, &temp_Task_attributes);
@@ -176,25 +180,28 @@ void MX_FREERTOS_Init(void) {
 
 }
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_StartWatchdogTask */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the WatchdogTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_StartWatchdogTask */
+void StartWatchdogTask(void *argument)
 {
-  /* USER CODE BEGIN StartDefaultTask */
-//	extern IWDG_HandleTypeDef hiwdg;
-  /* Infinite loop */
-  for(;;)
-  {
+  /* USER CODE BEGIN StartWatchdogTask */
 
-//	  HAL_IWDG_Refresh(&hiwdg);
-	  osDelay(100);
+  /* Infinite loop */
+
+    //watch dog
+	    for (;;)
+	    {
+
+	        HAL_IWDG_Refresh(&hiwdg);
+
+	        osDelay(500);
   }
-  /* USER CODE END StartDefaultTask */
+  /* USER CODE END StartWatchdogTask */
 }
 
 /* USER CODE BEGIN Header_Start_temp_Task */
@@ -214,7 +221,7 @@ void Start_temp_Task(void *argument)
 	        Error_Handler();
 	    }
 	    float temp;
-
+	    // Reads temperature from DS18B20 sensor and updates system queue
 	    for(;;)
 	    {
 	        // Start measurement
@@ -229,9 +236,9 @@ void Start_temp_Task(void *argument)
 	        osDelay(1000);
 
 	        }
-}
-  /* USER CODE END Start_temp_Task */
 
+  /* USER CODE END Start_temp_Task */
+}
 
 /* USER CODE BEGIN Header_Start_uart_Task */
 /**
@@ -250,35 +257,43 @@ void Start_uart_Task(void *argument)
 
 
   for (;;) {
+      //sending data to RPI for MQTT publishing
       if (xQueuePeek(stateQueue, &state, 25) == pdPASS) {
     	  int len = snprintf(msg, sizeof(msg),
-    	      "{\"temperature\":%.1f,\"heating\":%d,\"set_temperature\":%d,\"boiler_off\":%d}\n",
+    	      "{\"temperature\":%.1f,\"heating\":%d,\"set_temperature\":%d,\"boiler_off\":%d,\"boiler_error\":%d}\n",
     	      state.temp,
 			  (state.mode == BOILER_HEATING) ? 1 : 0,
     	      state.set_temp,
-			  (state.mode == BOILER_OFF) ? 1 : 0
+			  (state.mode == BOILER_OFF) ? 1 : 0,
+			  (state.mode == BOILER_ERROR) ? 1: 0
+
     	  );
 
     	  if (len > 0 && len < sizeof(msg)) {
     	      HAL_UART_Transmit(&huart1, (uint8_t*)msg, len, 50);
     	  }
+
 /*
   //debugging
           snprintf(msg, sizeof(msg),
-              "{\"set\":%d,\"temp\":%.1f}\r\n",
-              state.set_temp,
-              state.temp);
+        		  "{\"temperature\":%.1f,\"heating\":%d,\"set_temperature\":%d,\"boiler_off\":%d,\"boiler_error\":%d}\n",
+        		      	      state.temp,
+        		  			  (state.mode == BOILER_HEATING) ? 1 : 0,
+        		      	      state.set_temp,
+        		  			  (state.mode == BOILER_OFF) ? 1 : 0,
+        		  			  (state.mode == BOILER_ERROR) ? 1: 0
 
+        		      	  );
           HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
       }
-      */
+*/
 
       osDelay(200);
   }
-}
-}
-  /* USER CODE END Start_uart_Task */
+  }
 
+  /* USER CODE END Start_uart_Task */
+}
 
 /* USER CODE BEGIN Header_Start_ir_Task */
 /**
@@ -290,10 +305,16 @@ void Start_uart_Task(void *argument)
 void Start_ir_Task(void *argument)
 {
   /* USER CODE BEGIN Start_ir_Task */
+
     static uint32_t last_onoff_time = 0;
     ir_init();
   /* Infinite loop */
+
+	   // Task responsible for processing IR remote control commands
+	   // and forwarding decoded events to the application queue.
 	   for (;;) {
+
+		    // Wait for IR reception event from ISR
 	        if (osSemaphoreAcquire(irSemaphoreHandle, osWaitForever) == osOK) {
 
 	            int value = ir_read();
@@ -302,7 +323,7 @@ void Start_ir_Task(void *argument)
 
 	            if (value >= 0) {
 	                switch (value) {
-
+                    // Increase  temperature by 1°C
 	                    case IR_CODE_PLUS:
 	                        msg.type = IR_EVENT_TEMP_CHANGE;
 	                        msg.delta = 1;
@@ -310,6 +331,7 @@ void Start_ir_Task(void *argument)
 	                        break;
 
 	                    case IR_CODE_MINUS:
+	                 // Decrease temperature by 1°C
 	                        msg.type = IR_EVENT_TEMP_CHANGE;
 	                        msg.delta = -1;
 	                        xQueueSend(irQueue, &msg, 0);
@@ -317,10 +339,13 @@ void Start_ir_Task(void *argument)
 
 	                    case IR_CODE_ONOFF:
 	                    {
+	                 // ON/OFF control with debouncing
 	                        uint32_t now = osKernelGetTickCount();
+
 
 	                        if ((now - last_onoff_time) > ONOFF_DEBOUNCE_MS)
 	                        {
+
 	                            msg.type = IR_EVENT_TOGGLE_POWER;
 	                            msg.delta = 0;
 	                            xQueueSend(irQueue, &msg, 0);
@@ -333,9 +358,9 @@ void Start_ir_Task(void *argument)
 	              }
 	            }
 	        }
-	    }
-  /* USER CODE END Start_ir_Task */
 
+  /* USER CODE END Start_ir_Task */
+}
 
 /* USER CODE BEGIN Header_Start_Control_Task */
 /**
@@ -360,9 +385,12 @@ void Start_Control_Task(void *argument)
 
   /* Infinite loop */
 
+    // Main boiler control task:
+    // processes user commands, updates system state,
+    // controls outputs and publishes current status.
     for (;;)
     {
-        // 1. Recive from IR
+        //  Recive from IR
         if (xQueueReceive(irQueue, &msg, 0) == pdPASS)
         {
 
@@ -385,13 +413,13 @@ void Start_Control_Task(void *argument)
             }
         }
 
-        // 2. Recive from temperature sensor
+        //  Recive from temperature sensor
         if (xQueueReceive(tempQueue, &temp, 0) == pdPASS)
         {
             state.temp = temp;
         }
 
-        // 3. Control relay and temperature sensor fault handler
+        //  Control relay and temperature sensor fault handler
         // Sensor fault detection
         if (state.temp == 85)
         {
@@ -438,7 +466,6 @@ void Start_Control_Task(void *argument)
             case BOILER_OFF:
 
                 HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
-
                 HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
                 HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_RESET);
 
@@ -447,7 +474,6 @@ void Start_Control_Task(void *argument)
             case BOILER_IDLE:
 
                 HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
-
                 HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
                 HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
 
@@ -456,7 +482,6 @@ void Start_Control_Task(void *argument)
             case BOILER_HEATING:
 
                 HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
-
                 HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
                 HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET);
 
@@ -465,7 +490,7 @@ void Start_Control_Task(void *argument)
             case BOILER_ERROR:
 
                 HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
-
+                //led blinking to show alarm state
                 if (osKernelGetTickCount() - last_toggle >= 200)
                 {
                     HAL_GPIO_TogglePin(RED_LED_GPIO_Port, RED_LED_Pin);
@@ -477,15 +502,14 @@ void Start_Control_Task(void *argument)
                 break;
         }
 
-        // 4. Public state
+        // Public state
         xQueueOverwrite(stateQueue, &state);
         seg7_show(state.set_temp);
         osDelay(100);
     }
-}
+
   /* USER CODE END Start_Control_Task */
-
-
+}
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 
