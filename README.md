@@ -1,5 +1,7 @@
 <img width="800" height="450" alt="output2" src="https://github.com/user-attachments/assets/ce598522-a322-436a-89e2-a15c51781b7f" />
+
 # stm32-boiler-rtos
+
 ## Overview
 
 The STM32-based system controls a heater to maintain a user-defined temperature setpoint. The setpoint is adjusted using an IR remote control, the target temperature are displayed on a 7-segment display. LED indicators provide visual feedback of the heater state (ON/OFF/HEATING/ERROR).
@@ -61,4 +63,4 @@ Introduction of FSM for boiler control logic
 Improved IR remote responsiveness (interrupt + queue-based processing)
 <img width="3060" height="4080" alt="20260610_110549(1)" src="https://github.com/user-attachments/assets/77a03f80-1dd0-433b-a606-4f3660168b79" />
 
-# stm32-boiler-rtos
+
