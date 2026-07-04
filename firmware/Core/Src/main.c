@@ -62,17 +62,7 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-if (htim->Instance == TIM6)
-{
-  HAL_IncTick();
-}
-if (htim->Instance == TIM7)
-{
-    seg7_update();
-}
-}
+
 /* USER CODE END 0 */
 
 /**
@@ -222,16 +212,23 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   * @param  htim : TIM handle
   * @retval None
   */
-//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-//{
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
   /* USER CODE BEGIN Callback 0 */
-
+    if (htim->Instance == TIM6)
+    {
+        HAL_IncTick();
+    }
+    if (htim->Instance == TIM7)
+    {
+        seg7_update();
+    }
   /* USER CODE END Callback 0 */
 
   /* USER CODE BEGIN Callback 1 */
 
   /* USER CODE END Callback 1 */
-//}
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
